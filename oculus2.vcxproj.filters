@@ -10,5 +10,13 @@
     <ClCompile Include="src\main.c">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="loadOBJ.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="loadObj.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

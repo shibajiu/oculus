@@ -1,2 +1,8 @@
 Release/
 Debug/
+oculus3/Debug/
+oculus3/Release/
+*.sdf
+*.suo
+*.dll
+*.user

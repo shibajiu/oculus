@@ -11,6 +11,13 @@
 #include <assert.h>
 #include <SDL.h>
 #include <GL/glew.h>
+#include "../loadObj.h"
+
+//#define SOIL
+
+#ifdef SOIL
+#include <SOIL.h>
+#endif
 
 #ifdef WIN32
 #define OVR_OS_WIN32
@@ -31,6 +38,7 @@ void toggle_hmd_fullscreen(void);
 void display(void);
 void draw_scene(void);
 void draw_box(float xsz, float ysz, float zsz, float norm_sign);
+void draw_obj();
 void update_rtarg(int width, int height);
 int handle_event(SDL_Event *ev);
 int key_event(int key, int state);
@@ -43,7 +51,7 @@ static SDL_Window *win;
 static SDL_GLContext ctx;
 static int win_width, win_height;
 
-static unsigned int fbo, fb_tex, fb_depth;
+static unsigned int fbo, fb_tex, fb_depth, single_tex_cube;
 static int fb_width, fb_height;
 static int fb_tex_width, fb_tex_height;
 
@@ -54,9 +62,8 @@ static ovrGLTexture fb_ovr_tex[2];
 static union ovrGLConfig glcfg;
 static unsigned int distort_caps;
 static unsigned int hmd_caps;
-
+static string objpath = "E:\\hit\\test\\testtriangle\\testtriangle\\2.obj";
 static unsigned int chess_tex;
-
 
 int main(int argc, char **argv)
 {
@@ -92,7 +99,7 @@ int init(void)
 
 	x = y = SDL_WINDOWPOS_UNDEFINED;
 	flags = SDL_WINDOW_OPENGL;
-	if(!(win = SDL_CreateWindow("press 'f' to move to the HMD", x, y, 1024, 640, flags))) {
+	if(!(win = SDL_CreateWindow("aaa press 'f' to move to the HMD", x, y, 1024, 640, flags))) {
 		fprintf(stderr, "failed to create window\n");
 		return -1;
 	}
@@ -110,23 +117,28 @@ int init(void)
 			return -1;
 		}
 	}
-	printf("initialized HMD: %s - %s\n", hmd->Manufacturer, hmd->ProductName);
+	printf("Resolution HMD: %d(w) - %d(h)\n", hmd->Resolution.w, hmd->Resolution.h);
+	printf("aaaaaaaaaaaaaaaa initialized HMD: %s - %s\n", hmd->Manufacturer, hmd->ProductName);
+	
 
 	/* resize our window to match the HMD resolution */
-	SDL_SetWindowSize(win, hmd->Resolution.w, hmd->Resolution.h);
+	SDL_SetWindowSize(win, hmd->Resolution.w*0.5, hmd->Resolution.h*0.5);
+	//SDL_SetWindowSize(win, 800, 600);
 	SDL_SetWindowPosition(win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-	win_width = hmd->Resolution.w;
-	win_height = hmd->Resolution.h;
+	win_width = hmd->Resolution.w*0.5;
+	win_height = hmd->Resolution.h*0.5;
 
 	/* enable position and rotation tracking */
 	ovrHmd_ConfigureTracking(hmd, ovrTrackingCap_Orientation | ovrTrackingCap_MagYawCorrection | ovrTrackingCap_Position, 0);
 	/* retrieve the optimal render target resolution for each eye */
-	eyeres[0] = ovrHmd_GetFovTextureSize(hmd, ovrEye_Left, hmd->DefaultEyeFov[0], 1.0);
-	eyeres[1] = ovrHmd_GetFovTextureSize(hmd, ovrEye_Right, hmd->DefaultEyeFov[1], 1.0);
+	eyeres[0] = ovrHmd_GetFovTextureSize(hmd, ovrEye_Left, hmd->DefaultEyeFov[0], 1.0);//pixelsPerDisplayPixel
+	eyeres[1] = ovrHmd_GetFovTextureSize(hmd, ovrEye_Right, hmd->DefaultEyeFov[1], 1.0);//pixelsPerDisplayPixel
 
 	/* and create a single render target texture to encompass both eyes */
-	fb_width = eyeres[0].w + eyeres[1].w;
-	fb_height = eyeres[0].h > eyeres[1].h ? eyeres[0].h : eyeres[1].h;
+	fb_width = eyeres[0].w*0.5 + eyeres[1].w*0.5;
+	fb_height = eyeres[0].h > eyeres[1].h ? eyeres[0].h*0.5 : eyeres[1].h*0.5;
+	/*fb_width = 800;
+		fb_height = 600;*/
 	update_rtarg(fb_width, fb_height);
 
 	/* fill in the ovrGLTexture structures that describe our render target texture */
@@ -186,15 +198,38 @@ int init(void)
 		fprintf(stderr, "failed to configure distortion renderer\n");
 	}
 
+	if (Obj_Load(objpath, &Faces) == 1)
+		printf("objfile load complete(%s)\n",objpath);
+	else
+		fprintf(stderr, "failed to load objfile\n");
+
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 	glEnable(GL_LIGHT1);
 	glEnable(GL_NORMALIZE);
+#ifdef SOIL
+	printf("loading texture...\n");
+	single_tex_cube = SOIL_load_OGL_cubemap
+		(
+		"skybox\\right.jpg",
+		"skybox\\left.jpg",
+		"skybox\\top.jpg",
+		"skybox\\bottom.jpg",
+		"skybox\\back.jpg",
+		"skybox\\front.jpg",
+		SOIL_LOAD_RGB,
+		SOIL_CREATE_NEW_ID,
+		SOIL_FLAG_MIPMAPS
+		);
+	if (single_tex_cube)
+		printf("texture loaded\n");
+	else
+		printf("fail to load texture\n");
+#endif
 
 	glClearColor(0.1, 0.1, 0.1, 1);
-
 	chess_tex = gen_chess_tex(1.0, 0.7, 0.4, 0.4, 0.7, 1.0);
 	return 0;
 }
@@ -300,7 +335,11 @@ void display(void)
 		glTranslatef(0, -ovrHmd_GetFloat(hmd, OVR_KEY_EYE_HEIGHT, 1.65), 0);
 
 		/* finally draw the scene for this eye */
+#ifndef SOIL
 		draw_scene();
+#elif defined SOIL
+		draw_obj();
+#endif
 	}
 
 	/* after drawing both eyes into the texture render target, revert to drawing directly to the
@@ -323,6 +362,84 @@ void reshape(int x, int y)
 {
 	win_width = x;
 	win_height = y;
+}
+static float fExtent = 50.0f;
+void draw_obj()
+{
+#ifdef SOIL
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glLoadIdentity();
+
+	glColor3f(1, 1, 1);//Color Pollution prevention
+	glEnable(GL_TEXTURE_CUBE_MAP);
+	glBegin(GL_QUADS);
+	//-x
+	glTexCoord3f(-1.0f, 1.0f, -1.0f);
+	glVertex3f(-fExtent, fExtent, -fExtent);
+	glTexCoord3f(-1.0f, 1.0f, 1.0f);
+	glVertex3f(-fExtent, fExtent, fExtent);
+	glTexCoord3f(-1.0f, -1.0f, 1.0f);
+	glVertex3f(-fExtent, -fExtent, fExtent);
+	glTexCoord3f(-1.0f, -1.0f, -1.0f);
+	glVertex3f(-fExtent, -fExtent, -fExtent);
+
+	//+x
+	glTexCoord3f(1.0f, -1.0f, -1.0f);
+	glVertex3f(fExtent, -fExtent, -fExtent);
+	glTexCoord3f(1.0f, -1.0f, 1.0f);
+	glVertex3f(fExtent, -fExtent, fExtent);
+	glTexCoord3f(1.0f, 1.0f, 1.0f);
+	glVertex3f(fExtent, fExtent, fExtent);
+	glTexCoord3f(1.0f, 1.0f, -1.0f);
+	glVertex3f(fExtent, fExtent, -fExtent);
+
+	//+y
+	glTexCoord3f(-1.0f, 1.0f, -1.0f);
+	glVertex3f(-fExtent, fExtent, -fExtent);
+	glTexCoord3f(-1.0f, 1.0f, 1.0f);
+	glVertex3f(-fExtent, fExtent, fExtent);
+	glTexCoord3f(1.0f, 1.0f, 1.0f);
+	glVertex3f(fExtent, fExtent, fExtent);
+	glTexCoord3f(1.0f, 1.0f, -1.0f);
+	glVertex3f(fExtent, fExtent, -fExtent);
+
+	//-y
+	glTexCoord3f(1.0f, -1.0f, -1.0f);
+	glVertex3f(fExtent, -fExtent, -fExtent);
+	glTexCoord3f(1.0f, -1.0f, 1.0f);
+	glVertex3f(fExtent, -fExtent, fExtent);
+	glTexCoord3f(-1.0f, -1.0f, 1.0f);
+	glVertex3f(-fExtent, -fExtent, fExtent);
+	glTexCoord3f(-1.0f, -1.0f, -1.0f);
+	glVertex3f(-fExtent, -fExtent, -fExtent);
+
+
+	//-z
+	glTexCoord3f(-1.0f, -1.0f, -1.0f);
+	glVertex3f(-fExtent, -fExtent, -fExtent);
+	glTexCoord3f(1.0f, -1.0f, -1.0f);
+	glVertex3f(fExtent, -fExtent, -fExtent);
+	glTexCoord3f(1.0f, 1.0f, -1.0f);
+	glVertex3f(fExtent, fExtent, -fExtent);
+	glTexCoord3f(-1.0f, 1.0f, -1.0f);
+	glVertex3f(-fExtent, fExtent, -fExtent);
+
+	//+z
+	glTexCoord3f(-1.0f, 1.0f, 1.0f);
+	glVertex3f(-fExtent, fExtent, fExtent);
+	glTexCoord3f(1.0f, 1.0f, 1.0f);
+	glVertex3f(fExtent, fExtent, fExtent);
+	glTexCoord3f(1.0f, -1.0f, 1.0f);
+	glVertex3f(fExtent, -fExtent, fExtent);
+	glTexCoord3f(-1.0f, -1.0f, 1.0f);
+	glVertex3f(-fExtent, -fExtent, fExtent);
+
+	glEnd();
+	glDisable(GL_TEXTURE_CUBE_MAP);
+	
+	glFlush();
+#endif
 }
 
 void draw_scene(void)
