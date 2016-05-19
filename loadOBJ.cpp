@@ -17,7 +17,7 @@ int Obj_Load(string ObjPath, vector<Face> *obj)
 				Vertices.push_back(Vertex(f1, f2, f3));
 			}
 			else{
-				cout << "ERROR: vertex not in wanted format in OBJLoader" << "\n";
+				fprintf(stderr, "ERROR: vertex not in wanted format in OBJLoader\n");
 				exit(0);
 			}
 		}
@@ -26,7 +26,7 @@ int Obj_Load(string ObjPath, vector<Face> *obj)
 				Indexs.push_back(FaceIndex(i0, i1, i2));
 			}
 			else{
-				cout << "ERROR: FaceIndex not in wanted format in OBJLoader" << "\n";
+				fprintf(stderr, "ERROR: FaceIndex not in wanted format in OBJLoader\n");
 				exit(0);
 			}
 		}

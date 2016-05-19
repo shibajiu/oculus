@@ -47,11 +47,12 @@ unsigned int next_pow2(unsigned int x);
 void quat_to_matrix(const float *quat, float *mat);
 unsigned int gen_chess_tex(float r0, float g0, float b0, float r1, float g1, float b1);
 
+static bool isObjOn, istestScene, isVirtual,isVBO;
 static SDL_Window *win;
 static SDL_GLContext ctx;
-static int win_width, win_height;
+static int win_width, win_height,vsize;
 
-static unsigned int fbo, fb_tex, fb_depth, single_tex_cube;
+static unsigned int fbo, fb_tex, fb_depth, single_tex_cube,vbo_obj;
 static int fb_width, fb_height;
 static int fb_tex_width, fb_tex_height;
 
@@ -62,8 +63,8 @@ static ovrGLTexture fb_ovr_tex[2];
 static union ovrGLConfig glcfg;
 static unsigned int distort_caps;
 static unsigned int hmd_caps;
-static string objpath = "E:\\hit\\test\\testtriangle\\testtriangle\\2.obj";
 static unsigned int chess_tex;
+static string objpath = "E:\\hit\\test\\testtriangle\\testtriangle\\4.obj";
 
 int main(int argc, char **argv)
 {
@@ -91,6 +92,8 @@ int init(void)
 {
 	int i, x, y;
 	unsigned int flags;
+	istestScene = 0;//if distort and render the opengl scene
+	isVBO = 0;//if use vextice buffer object
 
 	/* libovr must be initialized before we create the OpenGL context */
 	ovr_Initialize(0);
@@ -112,10 +115,12 @@ int init(void)
 
 	if(!(hmd = ovrHmd_Create(0))) {
 		fprintf(stderr, "failed to open Oculus HMD, falling back to virtual debug HMD\n");
-		if(!(hmd = ovrHmd_CreateDebug(ovrHmd_DK2))) {
+		if (!(hmd = ovrHmd_CreateDebug(ovrHmd_DK2))) {
 			fprintf(stderr, "failed to create virtual debug HMD\n");
 			return -1;
 		}
+		else
+			isVirtual = 1;
 	}
 	printf("Resolution HMD: %d(w) - %d(h)\n", hmd->Resolution.w, hmd->Resolution.h);
 	printf("aaaaaaaaaaaaaaaa initialized HMD: %s - %s\n", hmd->Manufacturer, hmd->ProductName);
@@ -198,17 +203,34 @@ int init(void)
 		fprintf(stderr, "failed to configure distortion renderer\n");
 	}
 
-	if (Obj_Load(objpath, &Faces) == 1)
-		printf("objfile load complete(%s)\n",objpath);
-	else
-		fprintf(stderr, "failed to load objfile\n");
-
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 	glEnable(GL_LIGHT1);
 	glEnable(GL_NORMALIZE);
+
+	//load objfile
+	if (Obj_Load(objpath, &Faces) == 1){
+		printf("objfile load complete(%s)\n", objpath);
+		isObjOn = 1;
+		vsize = Faces.size();
+		glGenBuffers(1, &vbo_obj);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo_obj);
+		GLfloat *vertices = new GLfloat[vsize * 3];
+		for (int vi = 0; vi < vsize; vi++){
+			for (int vj = 0; vj < 3; vj++){
+				*(vertices + vi * 3 + vj) = Faces[vi].a.V[vj];
+			}
+		}
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		delete[] vertices;
+	}
+	else{
+		fprintf(stderr, "failed to load objfile\n");
+		isObjOn = 0;
+	}
+
 #ifdef SOIL
 	printf("loading texture...\n");
 	single_tex_cube = SOIL_load_OGL_cubemap
@@ -227,6 +249,8 @@ int init(void)
 		printf("texture loaded\n");
 	else
 		printf("fail to load texture\n");
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 #endif
 
 	glClearColor(0.1, 0.1, 0.1, 1);
@@ -281,6 +305,7 @@ void toggle_hmd_fullscreen(void)
 	}
 }
 
+static float rotX=0, rotY=0;
 void display(void)
 {
 	int i;
@@ -333,13 +358,14 @@ void display(void)
 		glTranslatef(-pose[eye].Position.x, -pose[eye].Position.y, -pose[eye].Position.z);
 		/* move the camera to the eye level of the user */
 		glTranslatef(0, -ovrHmd_GetFloat(hmd, OVR_KEY_EYE_HEIGHT, 1.65), 0);
-
+		if(isVirtual)
+			gluLookAt(0, 0, 0, sin(rotX), 0, -cos(rotX), 0, 1, 0);
 		/* finally draw the scene for this eye */
-#ifndef SOIL
-		draw_scene();
-#elif defined SOIL
-		draw_obj();
-#endif
+		if (!isObjOn)
+			draw_scene();
+		else
+			draw_obj();
+
 	}
 
 	/* after drawing both eyes into the texture render target, revert to drawing directly to the
@@ -366,13 +392,60 @@ void reshape(int x, int y)
 static float fExtent = 50.0f;
 void draw_obj()
 {
+	float lpos[][4] = {
+		{ -8, 2, 10, 1 },
+		{ 0, 15, 0, 1 }
+	};
+	float lcol[][4] = {
+		{ 0.8, 0.8, 0.8, 1 },
+		{ 0.4, 0.3, 0.3, 1 }
+	};
+	for (int i = 0; i<2; i++) {
+		glLightfv(GL_LIGHT0 + i, GL_POSITION, lpos[i]);
+		glLightfv(GL_LIGHT0 + i, GL_DIFFUSE, lcol[i]);
+	}
+
+	if (isVBO){		
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+		glTranslatef(30, 0, -30);
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo_obj);
+		glVertexAttribPointer(
+			0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+			3,                  // size
+			GL_FLOAT,           // type
+			GL_FALSE,           // normalized?
+			0,                  // stride
+			(void*)0            // array buffer offset
+			);
+
+		// Draw the triangle !
+		glDrawArrays(GL_TRIANGLES, 0, vsize); // Starting from vertex 0; 3 vertices total -> 1 triangle
+		glDisableVertexAttribArray(0);
+		glPopMatrix();
+	}
+	else{
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+		glTranslatef(0, 10, -10);
+		glBegin(GL_TRIANGLES);
+		for(int fi=0;fi<vsize;fi++){
+			glVertex3f(Faces[fi].a.x,Faces[fi].a.y,Faces[fi].a.z);
+			glVertex3f(Faces[fi].b.x,Faces[fi].b.y,Faces[fi].b.z);
+			glVertex3f(Faces[fi].c.x,Faces[fi].c.y,Faces[fi].c.z);
+		}
+		glEnd();
+		glPopMatrix();
+	}
+		
 #ifdef SOIL
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glLoadIdentity();
-
-	glColor3f(1, 1, 1);//Color Pollution prevention
+	
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
 	glEnable(GL_TEXTURE_CUBE_MAP);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, single_tex_cube);
 	glBegin(GL_QUADS);
 	//-x
 	glTexCoord3f(-1.0f, 1.0f, -1.0f);
@@ -395,26 +468,25 @@ void draw_obj()
 	glVertex3f(fExtent, fExtent, -fExtent);
 
 	//+y
-	glTexCoord3f(-1.0f, 1.0f, -1.0f);
-	glVertex3f(-fExtent, fExtent, -fExtent);
 	glTexCoord3f(-1.0f, 1.0f, 1.0f);
 	glVertex3f(-fExtent, fExtent, fExtent);
-	glTexCoord3f(1.0f, 1.0f, 1.0f);
-	glVertex3f(fExtent, fExtent, fExtent);
+	glTexCoord3f(-1.0f, 1.0f, -1.0f);
+	glVertex3f(-fExtent, fExtent, -fExtent);
 	glTexCoord3f(1.0f, 1.0f, -1.0f);
 	glVertex3f(fExtent, fExtent, -fExtent);
+	glTexCoord3f(1.0f, 1.0f, 1.0f);
+	glVertex3f(fExtent, fExtent, fExtent);	
 
 	//-y
 	glTexCoord3f(1.0f, -1.0f, -1.0f);
 	glVertex3f(fExtent, -fExtent, -fExtent);
-	glTexCoord3f(1.0f, -1.0f, 1.0f);
-	glVertex3f(fExtent, -fExtent, fExtent);
-	glTexCoord3f(-1.0f, -1.0f, 1.0f);
-	glVertex3f(-fExtent, -fExtent, fExtent);
 	glTexCoord3f(-1.0f, -1.0f, -1.0f);
 	glVertex3f(-fExtent, -fExtent, -fExtent);
-
-
+	glTexCoord3f(-1.0f, -1.0f, 1.0f);
+	glVertex3f(-fExtent, -fExtent, fExtent);
+	glTexCoord3f(1.0f, -1.0f, 1.0f);
+	glVertex3f(fExtent, -fExtent, fExtent);	
+	
 	//-z
 	glTexCoord3f(-1.0f, -1.0f, -1.0f);
 	glVertex3f(-fExtent, -fExtent, -fExtent);
@@ -434,11 +506,11 @@ void draw_obj()
 	glVertex3f(fExtent, -fExtent, fExtent);
 	glTexCoord3f(-1.0f, -1.0f, 1.0f);
 	glVertex3f(-fExtent, -fExtent, fExtent);
-
+	
 	glEnd();
 	glDisable(GL_TEXTURE_CUBE_MAP);
 	
-	glFlush();
+	glPopMatrix();
 #endif
 }
 
@@ -613,6 +685,13 @@ int handle_event(SDL_Event *ev)
 		if(ev->window.event == SDL_WINDOWEVENT_RESIZED) {
 			reshape(ev->window.data1, ev->window.data2);
 		}
+		break;
+
+	case SDL_MOUSEMOTION:
+		if (ev->motion.xrel > 0)
+			rotX += 180 / 3.1415;
+		if (ev->motion.xrel < 0)
+			rotX -= 180 / 3.1415;
 		break;
 
 	default:

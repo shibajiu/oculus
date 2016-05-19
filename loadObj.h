@@ -10,16 +10,23 @@ struct Vertex{//vertex
 	float x;
 	float y;
 	float z;
+	float V[3];
 	Vertex(){}
 	Vertex(float a, float b, float c){
 		x = a;
 		y = b;
 		z = c;
+		V[0] = x;
+		V[1] = y;
+		V[2] = z;
 	}
 	void set(float xf, float yf, float zf){
 		this->x = xf;
 		this->y = yf;
 		this->z = zf;
+		V[0] = x;
+		V[1] = y;
+		V[2] = z;
 	}
 
 	float getMax(){
@@ -50,11 +57,11 @@ struct Vertex{//vertex
 	use to find the view volume
 	**/
 	void findMaxAbs(Vertex cmp){
-		if (abs(this->x)<abs(cmp.x))
+		if (abs(this->x) < abs(cmp.x))
 			this->setX(cmp.x);
-		if (abs(this->y)<abs(cmp.y))
+		if (abs(this->y) < abs(cmp.y))
 			this->setY(cmp.y);
-		if (abs(this->z)<abs(cmp.z))
+		if (abs(this->z) < abs(cmp.z))
 			this->setZ(cmp.z);
 	}
 
@@ -62,11 +69,11 @@ struct Vertex{//vertex
 	use to find the view volume
 	**/
 	void findMinAbs(Vertex cmp){
-		if (abs(this->x)>abs(cmp.x))
+		if (abs(this->x) > abs(cmp.x))
 			this->setX(cmp.x);
-		if (abs(this->y)>abs(cmp.y))
+		if (abs(this->y) > abs(cmp.y))
 			this->setY(cmp.y);
-		if (abs(this->z)>abs(cmp.z))
+		if (abs(this->z) > abs(cmp.z))
 			this->setZ(cmp.z);
 	}
 };
@@ -90,7 +97,7 @@ struct Normal{//normal
 struct Face{
 	Vertex a;
 	Vertex b;
-	Vertex c;
+	Vertex c;	
 	Face(){}
 	void set(vector<Vertex> ver, FaceIndex ind){
 		this->a = ver[ind.a - 1];
@@ -102,11 +109,11 @@ struct Face{
 
 int Obj_Load(string ObjPath, vector<Face> *obj);
 vector<Face> Obj_Load(string ObjPath);
-	void getMaxXYZ(float *x, float *y, float *z);
-	void getMinXYZ(float *x, float *y, float *z);
+void getMaxXYZ(float *x, float *y, float *z);
+void getMinXYZ(float *x, float *y, float *z);
 
 
-static	vector<Vertex> Vertices;	
+static	vector<Vertex> Vertices;
 static	vector<FaceIndex> Indexs;
 static	vector<Normal> Normals;
 static	vector<Face> Faces;
