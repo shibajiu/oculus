@@ -13,7 +13,7 @@
 #include <GL/glew.h>
 #include "../loadObj.h"
 
-//#define SOIL
+#define SOIL
 
 #ifdef SOIL
 #include <SOIL.h>
@@ -102,7 +102,7 @@ int init(void)
 
 	x = y = SDL_WINDOWPOS_UNDEFINED;
 	flags = SDL_WINDOW_OPENGL;
-	if(!(win = SDL_CreateWindow("aaa press 'f' to move to the HMD", x, y, 1024, 640, flags))) {
+	if(!(win = SDL_CreateWindow("Oculus", x, y, 1024, 640, flags))) {
 		fprintf(stderr, "failed to create window\n");
 		return -1;
 	}
@@ -209,6 +209,9 @@ int init(void)
 	glEnable(GL_LIGHT0);
 	glEnable(GL_LIGHT1);
 	glEnable(GL_NORMALIZE);
+	float V[] = { 1, 1, 1, 1 };                        
+	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, V);
+	glEnable(GL_COLOR_MATERIAL);
 
 	//load objfile
 	if (Obj_Load(objpath, &Faces) == 1){
